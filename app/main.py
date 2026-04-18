@@ -22,6 +22,16 @@ def main():
         for f in long_funcs:
             print(f"- {f['name']} ({f['length']} lines)")
 
+    print("\nFunctions with too many arguments:")
+
+    many_args = analyzer.find_functions_with_many_args(max_args=2)
+
+    if not many_args:
+        print("None")
+    else:
+        for f in many_args:
+            print(f"- {f['name']} ({f['args']} args)")
+
 
 if __name__ == "__main__":
     main()

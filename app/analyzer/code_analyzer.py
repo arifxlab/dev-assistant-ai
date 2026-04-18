@@ -36,3 +36,17 @@ class CodeAnalyzer:
                 })
 
         return long_functions
+
+    def find_functions_with_many_args(self, max_args=4):
+        flagged = []
+
+        for func in self.get_functions():
+            num_args = len(func.args.args)
+
+            if num_args > max_args:
+                flagged.append({
+                    "name": func.name,
+                    "args": num_args
+                })
+
+        return flagged
