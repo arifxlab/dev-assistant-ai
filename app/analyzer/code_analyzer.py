@@ -20,3 +20,19 @@ class CodeAnalyzer:
                 functions.append(node)
 
         return functions
+
+    def find_long_functions(self, max_lines=10):
+        long_functions = []
+
+        for func in self.get_functions():
+            start = func.lineno
+            end = getattr(func, "end_lineno", start)
+            length = end - start + 1
+
+            if length > max_lines:
+                long_functions.append({
+                    "name": func.name,
+                    "length": length
+                })
+
+        return long_functions

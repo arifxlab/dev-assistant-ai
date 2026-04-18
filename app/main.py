@@ -13,6 +13,15 @@ def main():
     for func in analyzer.get_functions():
         print(f"- {func.name}")
 
+    print("\nLong functions:")
+    long_funcs = analyzer.find_long_functions(max_lines=5)
+
+    if not long_funcs:
+        print("None")
+    else:
+        for f in long_funcs:
+            print(f"- {f['name']} ({f['length']} lines)")
+
 
 if __name__ == "__main__":
     main()
