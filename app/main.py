@@ -32,6 +32,13 @@ def main():
         for f in many_args:
             print(f"- {f['name']} ({f['args']} args)")
 
+    print("\nFunction Complexity:")
+
+    complexities = analyzer.analyze_complexity()
+
+    for c in complexities:
+        print(f"- {c['name']} ({c['complexity']})")
+
 
 if __name__ == "__main__":
     main()

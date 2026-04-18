@@ -1,3 +1,4 @@
+from app.analyzer.complexity_analyzer import ComplexityAnalyzer
 import ast
 
 
@@ -50,3 +51,17 @@ class CodeAnalyzer:
                 })
 
         return flagged
+
+    def analyze_complexity(self):
+        results = []
+
+        for func in self.get_functions():
+            analyzer = ComplexityAnalyzer()
+            complexity = analyzer.analyze(func)
+
+            results.append({
+                "name": func.name,
+                "complexity": complexity
+            })
+
+        return results
