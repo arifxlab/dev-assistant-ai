@@ -9,35 +9,22 @@ def main():
     analyzer = CodeAnalyzer(file_path)
     analyzer.load_file()
 
-    print("Functions found:")
-    for func in analyzer.get_functions():
-        print(f"- {func.name}")
+    print("\nFull Analysis:")
 
-    print("\nLong functions:")
-    long_funcs = analyzer.find_long_functions(max_lines=5)
+    results = analyzer.full_analysis()
 
-    if not long_funcs:
-        print("None")
-    else:
-        for f in long_funcs:
-            print(f"- {f['name']} ({f['length']} lines)")
+    for r in results:
+        print(f"\nFunction: {r['name']}")
+        print(f"Length: {r['length']}")
+        print(f"Args: {r['args']}")
+        print(f"Complexity: {r['complexity']}")
 
-    print("\nFunctions with too many arguments:")
-
-    many_args = analyzer.find_functions_with_many_args(max_args=2)
-
-    if not many_args:
-        print("None")
-    else:
-        for f in many_args:
-            print(f"- {f['name']} ({f['args']} args)")
-
-    print("\nFunction Complexity:")
-
-    complexities = analyzer.analyze_complexity()
-
-    for c in complexities:
-        print(f"- {c['name']} ({c['complexity']})")
+        if not r["issues"]:
+            print("Issues: None")
+        else:
+            print("Issues:")
+            for issue in r["issues"]:
+                print(f"- {issue}")
 
 
 if __name__ == "__main__":

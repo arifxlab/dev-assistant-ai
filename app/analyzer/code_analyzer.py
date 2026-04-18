@@ -65,3 +65,37 @@ class CodeAnalyzer:
             })
 
         return results
+
+    def full_analysis(self):
+        results = []
+
+        for func in self.get_functions():
+            analyzer = ComplexityAnalyzer()
+            complexity = analyzer.analyze(func)
+
+            start = func.lineno
+            end = getattr(func, "end_lineno", start)
+            length = end - start + 1
+
+            num_args = len(func.args.args)
+
+            issues = []
+
+            if length > 10:
+                issues.append("Too long")
+
+            if num_args > 4:
+                issues.append("Too many arguments")
+
+            if complexity > 10:
+                issues.append("Too complex")
+
+            results.append({
+                "name": func.name,
+                "length": length,
+                "args": num_args,
+                "complexity": complexity,
+                "issues": issues
+            })
+
+        return results
