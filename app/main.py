@@ -27,6 +27,13 @@ def main():
             for issue in r["issues"]:
                 print(f"- {issue['type']} ({issue['severity']})")
 
+    print("\nWorst Functions:")
+
+    worst = analyzer.get_worst_functions()
+
+    for r in worst:
+        print(f"- {r['name']} (Score: {r['score']}/10)")
+
 
 if __name__ == "__main__":
     main()

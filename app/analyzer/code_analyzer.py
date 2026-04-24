@@ -22,50 +22,6 @@ class CodeAnalyzer:
 
         return functions
 
-    def find_long_functions(self, max_lines=10):
-        long_functions = []
-
-        for func in self.get_functions():
-            start = func.lineno
-            end = getattr(func, "end_lineno", start)
-            length = end - start + 1
-
-            if length > max_lines:
-                long_functions.append({
-                    "name": func.name,
-                    "length": length
-                })
-
-        return long_functions
-
-    def find_functions_with_many_args(self, max_args=4):
-        flagged = []
-
-        for func in self.get_functions():
-            num_args = len(func.args.args)
-
-            if num_args > max_args:
-                flagged.append({
-                    "name": func.name,
-                    "args": num_args
-                })
-
-        return flagged
-
-    def analyze_complexity(self):
-        results = []
-
-        for func in self.get_functions():
-            analyzer = ComplexityAnalyzer()
-            complexity = analyzer.analyze(func)
-
-            results.append({
-                "name": func.name,
-                "complexity": complexity
-            })
-
-        return results
-
     def full_analysis(self):
         results = []
 
@@ -110,3 +66,11 @@ class CodeAnalyzer:
             })
 
         return results
+
+    def get_worst_functions(self):
+        results = self.full_analysis()
+
+        # sort by lowest score first
+        sorted_results = sorted(results, key=lambda x: x["score"])
+
+        return sorted_results
