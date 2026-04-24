@@ -18,13 +18,14 @@ def main():
         print(f"Length: {r['length']}")
         print(f"Args: {r['args']}")
         print(f"Complexity: {r['complexity']}")
+        print(f"Score: {r['score']}/10")
 
         if not r["issues"]:
             print("Issues: None")
         else:
             print("Issues:")
             for issue in r["issues"]:
-                print(f"- {issue}")
+                print(f"- {issue['type']} ({issue['severity']})")
 
 
 if __name__ == "__main__":

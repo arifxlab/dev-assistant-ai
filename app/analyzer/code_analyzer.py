@@ -82,20 +82,31 @@ class CodeAnalyzer:
             issues = []
 
             if length > 10:
-                issues.append("Too long")
+                issues.append({"type": "Too long", "severity": "Medium"})
 
             if num_args > 4:
-                issues.append("Too many arguments")
+                issues.append({"type": "Too many arguments", "severity": "Medium"})
 
             if complexity > 10:
-                issues.append("Too complex")
+                issues.append({"type": "Too complex", "severity": "High"})
+
+            score = 10
+
+            for issue in issues:
+                if issue["severity"] == "High":
+                    score -= 3
+                elif issue["severity"] == "Medium":
+                    score -= 2
+
+            score = max(score, 0)
 
             results.append({
                 "name": func.name,
                 "length": length,
                 "args": num_args,
                 "complexity": complexity,
-                "issues": issues
+                "issues": issues,
+                "score": score
             })
 
         return results
