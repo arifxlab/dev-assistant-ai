@@ -34,6 +34,18 @@ def main():
     for r in worst:
         print(f"- {r['name']} (Score: {r['score']}/10)")
 
+    print("\nProblematic Functions:")
+
+    problematic = analyzer.get_problematic_functions()
+
+    if not problematic:
+        print("None 🎉")
+    else:
+        for r in problematic:
+            print(f"\n- {r['name']} (Score: {r['score']}/10)")
+            for issue in r["issues"]:
+                print(f"  → {issue['type']} ({issue['severity']})")
+
 
 if __name__ == "__main__":
     main()

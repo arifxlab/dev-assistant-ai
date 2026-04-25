@@ -74,3 +74,8 @@ class CodeAnalyzer:
         sorted_results = sorted(results, key=lambda x: x["score"])
 
         return sorted_results
+
+    def get_problematic_functions(self):
+        results = self.full_analysis()
+
+        return [r for r in results if r["issues"]]
