@@ -26,7 +26,21 @@ class CodeAnalyzer:
         ]
 
     # ---------------------------
-    # SMART AI SUGGESTIONS (UPGRADED)
+    # NESTING DETECTOR (FIXED)
+    # ---------------------------
+    def get_max_nesting(self, node, depth=0):
+        max_depth = depth
+
+        for child in ast.iter_child_nodes(node):
+            if isinstance(child, (ast.If, ast.For, ast.While)):
+                max_depth = max(max_depth, self.get_max_nesting(child, depth + 1))
+            else:
+                max_depth = max(max_depth, self.get_max_nesting(child, depth))
+
+        return max_depth
+
+    # ---------------------------
+    # SMART AI SUGGESTIONS
     # ---------------------------
     def get_suggestion(self, issue_type, func_name=None, value=None):
         if issue_type == "Too long":
@@ -44,6 +58,18 @@ class CodeAnalyzer:
                 "Reduce nested conditions or split logic into smaller functions."
             )
 
+        if issue_type == "Deep nesting":
+            return (
+                f"Function '{func_name}' has deep nesting. "
+                "Use early returns or split logic into helper functions."
+            )
+
+        if issue_type == "God Function":
+            return (
+                f"Function '{func_name}' is doing too much. "
+                "Split it into smaller functions with single responsibility."
+            )
+
         return "No suggestion available."
 
     # ---------------------------
@@ -56,11 +82,13 @@ class CodeAnalyzer:
             analyzer = ComplexityAnalyzer()
             complexity = analyzer.analyze(func)
 
-            length = (getattr(func, "end_lineno", func.lineno) - func.lineno + 1)
+            length = getattr(func, "end_lineno", func.lineno) - func.lineno + 1
             num_args = len(func.args.args)
+            nesting = self.get_max_nesting(func)
 
             issues = []
 
+            # BASIC RULES
             if length > 10:
                 issues.append({
                     "type": "Too long",
@@ -82,15 +110,36 @@ class CodeAnalyzer:
                     "suggestion": self.get_suggestion("Too complex", func.name)
                 })
 
+            # 🔥 DEEP NESTING
+            if nesting >= 3:
+                issues.append({
+                    "type": "Deep nesting",
+                    "severity": "High",
+                    "suggestion": self.get_suggestion("Deep nesting", func.name)
+                })
+
+            # 🔥 GOD FUNCTION
+            if length > 30 or complexity > 15:
+                issues.append({
+                    "type": "God Function",
+                    "severity": "High",
+                    "suggestion": self.get_suggestion("God Function", func.name)
+                })
+
             # ---------------------------
-            # SCORE ENGINE
+            # SCORING SYSTEM
             # ---------------------------
             score = 10
+
             for issue in issues:
                 if issue["severity"] == "High":
                     score -= 3
                 elif issue["severity"] == "Medium":
                     score -= 2
+
+            # extra penalty for deep nesting
+            if nesting >= 3:
+                score -= 2
 
             score = max(score, 0)
 
@@ -99,6 +148,7 @@ class CodeAnalyzer:
                 "length": length,
                 "args": num_args,
                 "complexity": complexity,
+                "nesting": nesting,
                 "issues": issues,
                 "score": score
             })
@@ -109,15 +159,13 @@ class CodeAnalyzer:
     # WORST FUNCTIONS
     # ---------------------------
     def get_worst_functions(self):
-        results = self.full_analysis()
-        return sorted(results, key=lambda x: x["score"])  # lowest score first
+        return sorted(self.full_analysis(), key=lambda x: x["score"])
 
     # ---------------------------
     # PROBLEMATIC FUNCTIONS
     # ---------------------------
     def get_problematic_functions(self):
-        results = self.full_analysis()
-        return [r for r in results if r["issues"]]
+        return [r for r in self.full_analysis() if r["issues"]]
 
     # ---------------------------
     # CRITICAL FUNCTIONS
