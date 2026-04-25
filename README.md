@@ -11,3 +11,13 @@ An AI-powered tool to analyze codebases, improve code quality, and assist develo
 ## Tech Stack
 - Python
 - FastAPI
+
+## Features (Current Progress)
+
+- AST-based code analysis
+- Function extraction
+- Cyclomatic complexity detection
+- Code quality scoring system
+- CLI output with issue detection
+- FastAPI backend with /analyze endpoint
+- JSON response support
