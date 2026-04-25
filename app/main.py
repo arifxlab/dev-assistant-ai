@@ -1,3 +1,5 @@
+from colorama import Fore, init
+init(autoreset=True)
 import os
 from app.analyzer.code_analyzer import CodeAnalyzer
 
@@ -18,14 +20,22 @@ def main():
         print(f"Length: {r['length']}")
         print(f"Args: {r['args']}")
         print(f"Complexity: {r['complexity']}")
-        print(f"Score: {r['score']}/10")
+        if r["score"] <= 5:
+            print(Fore.RED + f"Score: {r['score']}/10")
+        elif r["score"] <= 7:
+            print(Fore.YELLOW + f"Score: {r['score']}/10")
+        else:
+            print(Fore.GREEN + f"Score: {r['score']}/10")
 
         if not r["issues"]:
             print("Issues: None")
         else:
             print("Issues:")
             for issue in r["issues"]:
-                print(f"- {issue['type']} ({issue['severity']})")
+                if issue["severity"] == "High":
+                    print(Fore.RED + f"- {issue['type']} (High)")
+                else:
+                    print(Fore.YELLOW + f"- {issue['type']} (Medium)")
 
     print("\nWorst Functions:")
     worst = analyzer.get_worst_functions()
