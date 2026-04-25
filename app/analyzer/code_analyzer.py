@@ -79,3 +79,20 @@ class CodeAnalyzer:
         results = self.full_analysis()
 
         return [r for r in results if r["issues"]]
+
+    def get_critical_functions(self):
+        results = self.full_analysis()
+
+        critical = []
+
+        for r in results:
+            high_issues = [i for i in r["issues"] if i["severity"] == "High"]
+
+            if high_issues:
+                critical.append({
+                    "name": r["name"],
+                    "score": r["score"],
+                    "issues": high_issues
+                })
+
+        return critical

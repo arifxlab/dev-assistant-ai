@@ -28,14 +28,11 @@ def main():
                 print(f"- {issue['type']} ({issue['severity']})")
 
     print("\nWorst Functions:")
-
     worst = analyzer.get_worst_functions()
-
     for r in worst:
         print(f"- {r['name']} (Score: {r['score']}/10)")
 
     print("\nProblematic Functions:")
-
     problematic = analyzer.get_problematic_functions()
 
     if not problematic:
@@ -45,6 +42,17 @@ def main():
             print(f"\n- {r['name']} (Score: {r['score']}/10)")
             for issue in r["issues"]:
                 print(f"  → {issue['type']} ({issue['severity']})")
+
+    print("\nCritical Functions:")
+    critical = analyzer.get_critical_functions()
+
+    if not critical:
+        print("None 🚀")
+    else:
+        for r in critical:
+            print(f"\n- {r['name']} (Score: {r['score']}/10)")
+            for issue in r["issues"]:
+                print(f"  🔥 {issue['type']}")
 
 
 if __name__ == "__main__":
