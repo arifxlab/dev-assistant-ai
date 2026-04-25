@@ -7,30 +7,48 @@ class CodeAnalyzer:
         self.file_path = file_path
         self.tree = None
 
+    # ---------------------------
+    # LOAD CODE
+    # ---------------------------
     def load_file(self):
         with open(self.file_path, "r", encoding="utf-8") as f:
             code = f.read()
 
         self.tree = ast.parse(code)
 
+    # ---------------------------
+    # GET FUNCTIONS
+    # ---------------------------
     def get_functions(self):
-        functions = []
+        return [
+            node for node in ast.walk(self.tree)
+            if isinstance(node, ast.FunctionDef)
+        ]
 
-        for node in ast.walk(self.tree):
-            if isinstance(node, ast.FunctionDef):
-                functions.append(node)
+    # ---------------------------
+    # SMART AI SUGGESTIONS (UPGRADED)
+    # ---------------------------
+    def get_suggestion(self, issue_type, func_name=None, value=None):
+        if issue_type == "Too long":
+            return f"Function '{func_name}' is too long. Break it into smaller helper functions."
 
-        return functions
+        if issue_type == "Too many arguments":
+            return (
+                f"Function '{func_name}' has {value} parameters. "
+                "Group related parameters into a class or dictionary."
+            )
 
-    # 🔥 NEW: suggestion system
-    def get_suggestion(self, issue_type):
-        suggestions = {
-            "Too long": "Break this function into smaller functions.",
-            "Too many arguments": "Consider grouping parameters into a class or dictionary.",
-            "Too complex": "Reduce nested logic or split into smaller functions."
-        }
-        return suggestions.get(issue_type, "No suggestion available.")
+        if issue_type == "Too complex":
+            return (
+                f"Function '{func_name}' has high complexity. "
+                "Reduce nested conditions or split logic into smaller functions."
+            )
 
+        return "No suggestion available."
+
+    # ---------------------------
+    # CORE ANALYSIS ENGINE
+    # ---------------------------
     def full_analysis(self):
         results = []
 
@@ -38,39 +56,36 @@ class CodeAnalyzer:
             analyzer = ComplexityAnalyzer()
             complexity = analyzer.analyze(func)
 
-            start = func.lineno
-            end = getattr(func, "end_lineno", start)
-            length = end - start + 1
-
+            length = (getattr(func, "end_lineno", func.lineno) - func.lineno + 1)
             num_args = len(func.args.args)
 
             issues = []
 
-            # ✅ FIXED: conditions restored
             if length > 10:
                 issues.append({
                     "type": "Too long",
                     "severity": "Medium",
-                    "suggestion": self.get_suggestion("Too long")
+                    "suggestion": self.get_suggestion("Too long", func.name)
                 })
 
             if num_args > 4:
                 issues.append({
                     "type": "Too many arguments",
                     "severity": "Medium",
-                    "suggestion": self.get_suggestion("Too many arguments")
+                    "suggestion": self.get_suggestion("Too many arguments", func.name, num_args)
                 })
 
             if complexity > 10:
                 issues.append({
                     "type": "Too complex",
                     "severity": "High",
-                    "suggestion": self.get_suggestion("Too complex")
+                    "suggestion": self.get_suggestion("Too complex", func.name)
                 })
 
-            # scoring system
+            # ---------------------------
+            # SCORE ENGINE
+            # ---------------------------
             score = 10
-
             for issue in issues:
                 if issue["severity"] == "High":
                     score -= 3
@@ -90,26 +105,32 @@ class CodeAnalyzer:
 
         return results
 
+    # ---------------------------
+    # WORST FUNCTIONS
+    # ---------------------------
     def get_worst_functions(self):
         results = self.full_analysis()
-        return sorted(results, key=lambda x: x["score"])
+        return sorted(results, key=lambda x: x["score"])  # lowest score first
 
+    # ---------------------------
+    # PROBLEMATIC FUNCTIONS
+    # ---------------------------
     def get_problematic_functions(self):
         results = self.full_analysis()
         return [r for r in results if r["issues"]]
 
+    # ---------------------------
+    # CRITICAL FUNCTIONS
+    # ---------------------------
     def get_critical_functions(self):
         results = self.full_analysis()
-        critical = []
 
-        for r in results:
-            high_issues = [i for i in r["issues"] if i["severity"] == "High"]
-
-            if high_issues:
-                critical.append({
-                    "name": r["name"],
-                    "score": r["score"],
-                    "issues": high_issues
-                })
-
-        return critical
+        return [
+            {
+                "name": r["name"],
+                "score": r["score"],
+                "issues": [i for i in r["issues"] if i["severity"] == "High"]
+            }
+            for r in results
+            if any(i["severity"] == "High" for i in r["issues"])
+        ]
