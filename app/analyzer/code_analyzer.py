@@ -22,6 +22,15 @@ class CodeAnalyzer:
 
         return functions
 
+    # 🔥 NEW: suggestion system
+    def get_suggestion(self, issue_type):
+        suggestions = {
+            "Too long": "Break this function into smaller functions.",
+            "Too many arguments": "Consider grouping parameters into a class or dictionary.",
+            "Too complex": "Reduce nested logic or split into smaller functions."
+        }
+        return suggestions.get(issue_type, "No suggestion available.")
+
     def full_analysis(self):
         results = []
 
@@ -37,15 +46,29 @@ class CodeAnalyzer:
 
             issues = []
 
+            # ✅ FIXED: conditions restored
             if length > 10:
-                issues.append({"type": "Too long", "severity": "Medium"})
+                issues.append({
+                    "type": "Too long",
+                    "severity": "Medium",
+                    "suggestion": self.get_suggestion("Too long")
+                })
 
             if num_args > 4:
-                issues.append({"type": "Too many arguments", "severity": "Medium"})
+                issues.append({
+                    "type": "Too many arguments",
+                    "severity": "Medium",
+                    "suggestion": self.get_suggestion("Too many arguments")
+                })
 
             if complexity > 10:
-                issues.append({"type": "Too complex", "severity": "High"})
+                issues.append({
+                    "type": "Too complex",
+                    "severity": "High",
+                    "suggestion": self.get_suggestion("Too complex")
+                })
 
+            # scoring system
             score = 10
 
             for issue in issues:
@@ -69,20 +92,14 @@ class CodeAnalyzer:
 
     def get_worst_functions(self):
         results = self.full_analysis()
-
-        # sort by lowest score first
-        sorted_results = sorted(results, key=lambda x: x["score"])
-
-        return sorted_results
+        return sorted(results, key=lambda x: x["score"])
 
     def get_problematic_functions(self):
         results = self.full_analysis()
-
         return [r for r in results if r["issues"]]
 
     def get_critical_functions(self):
         results = self.full_analysis()
-
         critical = []
 
         for r in results:
