@@ -1,19 +1,26 @@
 from fastapi import FastAPI
+from pydantic import BaseModel
 from app.analyzer.code_analyzer import CodeAnalyzer
-import os
+import ast
+
+class CodeRequest(BaseModel):
+    code: str
+
 
 app = FastAPI()
+
 
 @app.get("/")
 def home():
     return {"message": "Dev Assistant AI API running"}
 
-@app.post("/analyze")
-def analyze():
-    file_path = os.path.join("app", "main.py")
 
-    analyzer = CodeAnalyzer(file_path)
-    analyzer.load_file()
+@app.post("/analyze")
+def analyze(request: CodeRequest):
+    tree = ast.parse(request.code)
+
+    analyzer = CodeAnalyzer("")
+    analyzer.tree = tree
 
     return {
         "analysis": analyzer.full_analysis(),
