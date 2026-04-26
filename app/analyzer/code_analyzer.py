@@ -1,26 +1,27 @@
 from app.analyzer.complexity_analyzer import ComplexityAnalyzer
+from app.ai.ai_engine import AIEngine
 import ast
 
 
 class CodeAnalyzer:
     """
     ======================================================
-    LEVEL 3++ CODE ANALYSIS ENGINE (MERGED VERSION)
+    LEVEL 4 READY ANALYZER (FINAL MERGED VERSION)
     ======================================================
-
-    Features:
     - AST parsing
     - Complexity analysis
     - Nesting detection
-    - Variable analysis (bad names, unused, count)
-    - AI-style suggestions
-    - AI insight engine
-    - Smart scoring system
+    - Variable analysis
+    - Rule-based issues
+    - AI suggestions
+    - AI insight
+    - REAL AI review (Ollama)
     """
 
     def __init__(self, file_path: str):
         self.file_path = file_path
         self.tree = None
+        self.ai = AIEngine()  # 🔥 AI initialized
 
     # ======================================================
     # LOAD SOURCE CODE
@@ -39,25 +40,34 @@ class CodeAnalyzer:
         ]
 
     # ======================================================
-    # COMPLEXITY ANALYSIS
+    # EXTRACT FUNCTION CODE (FOR AI)
+    # ======================================================
+    def get_function_code(self, func):
+        with open(self.file_path, "r", encoding="utf-8") as f:
+            lines = f.readlines()
+
+        start = func.lineno - 1
+        end = getattr(func, "end_lineno", func.lineno)
+
+        return "".join(lines[start:end])
+
+    # ======================================================
+    # COMPLEXITY
     # ======================================================
     def get_complexity(self, func):
         return ComplexityAnalyzer().analyze(func)
 
     # ======================================================
-    # BASIC METRICS
+    # METRICS
     # ======================================================
     def get_metrics(self, func):
         length = getattr(func, "end_lineno", func.lineno) - func.lineno + 1
         args = len(func.args.args)
 
-        return {
-            "length": length,
-            "args": args
-        }
+        return {"length": length, "args": args}
 
     # ======================================================
-    # NESTING DETECTOR
+    # NESTING
     # ======================================================
     def get_max_nesting(self, node, depth=0):
         max_depth = depth
@@ -71,7 +81,7 @@ class CodeAnalyzer:
         return max_depth
 
     # ======================================================
-    # VARIABLE ANALYSIS (MERGED FEATURE)
+    # VARIABLE ANALYSIS
     # ======================================================
     def get_bad_variable_names(self, func):
         weak_names = {"x", "y", "z", "temp", "data", "val"}
@@ -93,7 +103,6 @@ class CodeAnalyzer:
                 for target in node.targets:
                     if isinstance(target, ast.Name):
                         assigned.add(target.id)
-
             elif isinstance(node, ast.Name):
                 used.add(node.id)
 
@@ -109,38 +118,38 @@ class CodeAnalyzer:
         return len(vars_found)
 
     # ======================================================
-    # AI SUGGESTION ENGINE
+    # AI SUGGESTIONS (RULE-BASED)
     # ======================================================
-    def get_suggestion(self, issue, func_name, value=None):
+    def get_suggestion(self, issue, func_name):
         return {
             "Too long": f"Refactor '{func_name}' into smaller functions.",
-            "Too many arguments": f"Reduce parameters in '{func_name}' using class/dict.",
-            "Too complex": f"Simplify logic in '{func_name}' by reducing nesting.",
-            "Deep nesting": f"Flatten logic in '{func_name}' using early returns.",
+            "Too many arguments": f"Reduce parameters in '{func_name}'.",
+            "Too complex": f"Simplify logic in '{func_name}'.",
+            "Deep nesting": f"Flatten logic in '{func_name}'.",
             "God Function": f"Split '{func_name}' into multiple functions.",
             "Bad variables": f"Use meaningful variable names in '{func_name}'.",
             "Unused variables": f"Remove unused variables in '{func_name}'."
         }.get(issue, "No suggestion available.")
 
     # ======================================================
-    # AI INSIGHT ENGINE
+    # AI INSIGHT (SMART SUMMARY)
     # ======================================================
-    def generate_insight(self, func_name, issues, metrics, nesting):
+    def generate_insight(self, metrics, nesting, issues):
         insights = []
 
         if metrics["length"] > 20:
-            insights.append("Function is doing too many things.")
+            insights.append("Function is too large.")
 
         if metrics["args"] > 4:
-            insights.append("Too many parameters increases coupling.")
+            insights.append("Too many parameters increase coupling.")
 
         if nesting >= 3:
-            insights.append("Deep nesting increases cognitive complexity.")
+            insights.append("Deep nesting increases complexity.")
 
         if len(issues) >= 3:
-            insights.append("Multiple design issues detected — refactor needed.")
+            insights.append("Multiple design issues detected.")
 
-        return " ".join(insights) if insights else "Code structure is clean."
+        return " ".join(insights) if insights else "Structure looks good."
 
     # ======================================================
     # MAIN ANALYSIS ENGINE
@@ -154,80 +163,40 @@ class CodeAnalyzer:
             metrics = self.get_metrics(func)
             nesting = self.get_max_nesting(func)
 
-            # -------------------------
-            # VARIABLE ANALYSIS (MERGED)
-            # -------------------------
             bad_vars = self.get_bad_variable_names(func)
             unused_vars = self.get_unused_variables(func)
             local_var_count = self.get_local_variable_count(func)
 
             issues = []
 
-            # =========================
-            # RULE ENGINE
-            # =========================
-
+            # ---------------- RULES ----------------
             if metrics["length"] > 10:
-                issues.append({
-                    "type": "Too long",
-                    "severity": "Medium",
-                    "suggestion": self.get_suggestion("Too long", func.name)
-                })
+                issues.append({"type": "Too long", "severity": "Medium"})
 
             if metrics["args"] > 4:
-                issues.append({
-                    "type": "Too many arguments",
-                    "severity": "Medium",
-                    "suggestion": self.get_suggestion("Too many arguments", func.name)
-                })
+                issues.append({"type": "Too many arguments", "severity": "Medium"})
 
             if complexity > 10:
-                issues.append({
-                    "type": "Too complex",
-                    "severity": "High",
-                    "suggestion": self.get_suggestion("Too complex", func.name)
-                })
+                issues.append({"type": "Too complex", "severity": "High"})
 
             if nesting >= 3:
-                issues.append({
-                    "type": "Deep nesting",
-                    "severity": "High",
-                    "suggestion": self.get_suggestion("Deep nesting", func.name)
-                })
+                issues.append({"type": "Deep nesting", "severity": "High"})
 
             if metrics["length"] > 30 or complexity > 15:
-                issues.append({
-                    "type": "God Function",
-                    "severity": "Critical",
-                    "suggestion": self.get_suggestion("God Function", func.name)
-                })
+                issues.append({"type": "God Function", "severity": "Critical"})
 
             if bad_vars:
-                issues.append({
-                    "type": "Bad variables",
-                    "severity": "Medium",
-                    "suggestion": self.get_suggestion("Bad variables", func.name)
-                })
+                issues.append({"type": "Bad variables", "severity": "Medium"})
 
             if unused_vars:
-                issues.append({
-                    "type": "Unused variables",
-                    "severity": "Medium",
-                    "suggestion": self.get_suggestion("Unused variables", func.name)
-                })
+                issues.append({"type": "Unused variables", "severity": "Medium"})
 
-            if local_var_count > 10:
-                issues.append({
-                    "type": "Too many local variables",
-                    "severity": "Medium",
-                    "suggestion": "Break function into smaller logic blocks."
-                })
+            # add suggestions
+            for i in issues:
+                i["suggestion"] = self.get_suggestion(i["type"], func.name)
 
-            # =========================
-            # SCORING ENGINE
-            # =========================
+            # ---------------- SCORE ----------------
             score = 10
-
             for i in issues:
                 if i["severity"] == "Critical":
                     score -= 5
@@ -241,19 +210,13 @@ class CodeAnalyzer:
 
             score = max(score, 0)
 
-            # =========================
-            # AI INSIGHT
-            # =========================
-            insight = self.generate_insight(
-                func.name,
-                issues,
-                metrics,
-                nesting
-            )
+            # ---------------- AI REVIEW (🔥 MAIN FEATURE) ----------------
+            func_code = self.get_function_code(func)
+            ai_review = self.ai.generate_review(func_code)
 
-            # =========================
-            # FINAL RESULT
-            # =========================
+            # ---------------- INSIGHT ----------------
+            insight = self.generate_insight(metrics, nesting, issues)
+
             results.append({
                 "name": func.name,
                 "length": metrics["length"],
@@ -267,13 +230,14 @@ class CodeAnalyzer:
                 },
                 "issues": issues,
                 "score": score,
-                "ai_insight": insight
+                "ai_insight": insight,
+                "ai_review": ai_review   # 🔥 REAL AI OUTPUT
             })
 
         return results
 
     # ======================================================
-    # FILTER FUNCTIONS
+    # FILTERS
     # ======================================================
     def get_worst_functions(self):
         return sorted(self.full_analysis(), key=lambda x: x["score"])
@@ -283,11 +247,6 @@ class CodeAnalyzer:
 
     def get_critical_functions(self):
         return [
-            {
-                "name": f["name"],
-                "score": f["score"],
-                "issues": f["issues"]
-            }
-            for f in self.full_analysis()
+            f for f in self.full_analysis()
             if any(i["severity"] == "Critical" for i in f["issues"])
         ]
