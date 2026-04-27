@@ -17,10 +17,9 @@ def home():
 
 @app.post("/analyze")
 def analyze(request: CodeRequest):
-    tree = ast.parse(request.code)
 
     analyzer = CodeAnalyzer("")
-    analyzer.tree = tree
+    analyzer.load_code(request.code)
 
     return {
         "analysis": analyzer.full_analysis(),

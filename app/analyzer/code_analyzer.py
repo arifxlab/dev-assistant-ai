@@ -8,27 +8,30 @@ class CodeAnalyzer:
     ======================================================
     LEVEL 4 READY ANALYZER (FINAL MERGED VERSION)
     ======================================================
-    - AST parsing
+
+    Features:
+    - AST parsing (in-memory)
     - Complexity analysis
     - Nesting detection
     - Variable analysis
     - Rule-based issues
     - AI suggestions
-    - AI insight
+    - AI insights
     - REAL AI review (Ollama)
     """
 
     def __init__(self, file_path: str):
         self.file_path = file_path
         self.tree = None
-        self.ai = AIEngine()  # 🔥 AI initialized
+        self.source_code = ""   # ✅ STORE ORIGINAL CODE
+        self.ai = AIEngine()    # ✅ AI ENGINE
 
     # ======================================================
-    # LOAD SOURCE CODE
+    # LOAD CODE (IN-MEMORY)
     # ======================================================
-    def load_file(self):
-        with open(self.file_path, "r", encoding="utf-8") as f:
-            self.tree = ast.parse(f.read())
+    def load_code(self, code: str):
+        self.source_code = code
+        self.tree = ast.parse(code)
 
     # ======================================================
     # FUNCTION EXTRACTION
@@ -40,16 +43,15 @@ class CodeAnalyzer:
         ]
 
     # ======================================================
-    # EXTRACT FUNCTION CODE (FOR AI)
+    # EXTRACT FUNCTION CODE (FROM MEMORY)
     # ======================================================
     def get_function_code(self, func):
-        with open(self.file_path, "r", encoding="utf-8") as f:
-            lines = f.readlines()
+        lines = self.source_code.splitlines()
 
         start = func.lineno - 1
         end = getattr(func, "end_lineno", func.lineno)
 
-        return "".join(lines[start:end])
+        return "\n".join(lines[start:end])
 
     # ======================================================
     # COMPLEXITY
@@ -191,7 +193,13 @@ class CodeAnalyzer:
             if unused_vars:
                 issues.append({"type": "Unused variables", "severity": "Medium"})
 
-            # add suggestions
+            if local_var_count > 10:
+                issues.append({
+                    "type": "Too many local variables",
+                    "severity": "Medium"
+                })
+
+            # ---------------- ADD SUGGESTIONS ----------------
             for i in issues:
                 i["suggestion"] = self.get_suggestion(i["type"], func.name)
 
@@ -210,7 +218,7 @@ class CodeAnalyzer:
 
             score = max(score, 0)
 
-            # ---------------- AI REVIEW (🔥 MAIN FEATURE) ----------------
+            # ---------------- AI REVIEW ----------------
             func_code = self.get_function_code(func)
             ai_review = self.ai.generate_review(func_code)
 
@@ -231,7 +239,7 @@ class CodeAnalyzer:
                 "issues": issues,
                 "score": score,
                 "ai_insight": insight,
-                "ai_review": ai_review   # 🔥 REAL AI OUTPUT
+                "ai_review": ai_review
             })
 
         return results
