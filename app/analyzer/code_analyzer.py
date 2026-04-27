@@ -5,33 +5,30 @@ import ast
 
 class CodeAnalyzer:
     """
-    ======================================================
-    LEVEL 4 READY ANALYZER (FINAL MERGED VERSION)
-    ======================================================
-
-    Features:
-    - AST parsing (in-memory)
-    - Complexity analysis
-    - Nesting detection
-    - Variable analysis
-    - Rule-based issues
-    - AI suggestions
-    - AI insights
-    - REAL AI review (Ollama)
+    LEVEL 4 READY ANALYZER (CLEAN VERSION)
     """
 
-    def __init__(self, file_path: str):
+    def __init__(self, file_path: str = ""):
         self.file_path = file_path
         self.tree = None
-        self.source_code = ""   # ✅ STORE ORIGINAL CODE
-        self.ai = AIEngine()    # ✅ AI ENGINE
+        self.source_code = ""
+        self.ai = AIEngine()
 
     # ======================================================
-    # LOAD CODE (IN-MEMORY)
+    # LOAD CODE INTO MEMORY
     # ======================================================
     def load_code(self, code: str):
         self.source_code = code
         self.tree = ast.parse(code)
+
+    # ======================================================
+    # GET FUNCTION SOURCE FROM MEMORY
+    # ======================================================
+    def get_function_source(self, func):
+        lines = self.source_code.splitlines()
+        start = func.lineno - 1
+        end = getattr(func, "end_lineno", func.lineno)
+        return "\n".join(lines[start:end])
 
     # ======================================================
     # FUNCTION EXTRACTION
@@ -41,17 +38,6 @@ class CodeAnalyzer:
             node for node in ast.walk(self.tree)
             if isinstance(node, ast.FunctionDef)
         ]
-
-    # ======================================================
-    # EXTRACT FUNCTION CODE (FROM MEMORY)
-    # ======================================================
-    def get_function_code(self, func):
-        lines = self.source_code.splitlines()
-
-        start = func.lineno - 1
-        end = getattr(func, "end_lineno", func.lineno)
-
-        return "\n".join(lines[start:end])
 
     # ======================================================
     # COMPLEXITY
@@ -65,7 +51,6 @@ class CodeAnalyzer:
     def get_metrics(self, func):
         length = getattr(func, "end_lineno", func.lineno) - func.lineno + 1
         args = len(func.args.args)
-
         return {"length": length, "args": args}
 
     # ======================================================
@@ -102,25 +87,19 @@ class CodeAnalyzer:
 
         for node in ast.walk(func):
             if isinstance(node, ast.Assign):
-                for target in node.targets:
-                    if isinstance(target, ast.Name):
-                        assigned.add(target.id)
+                for t in node.targets:
+                    if isinstance(t, ast.Name):
+                        assigned.add(t.id)
             elif isinstance(node, ast.Name):
                 used.add(node.id)
 
         return list(assigned - used)
 
     def get_local_variable_count(self, func):
-        vars_found = set()
-
-        for node in ast.walk(func):
-            if isinstance(node, ast.Name):
-                vars_found.add(node.id)
-
-        return len(vars_found)
+        return len({n.id for n in ast.walk(func) if isinstance(n, ast.Name)})
 
     # ======================================================
-    # AI SUGGESTIONS (RULE-BASED)
+    # RULE SUGGESTIONS
     # ======================================================
     def get_suggestion(self, issue, func_name):
         return {
@@ -134,27 +113,24 @@ class CodeAnalyzer:
         }.get(issue, "No suggestion available.")
 
     # ======================================================
-    # AI INSIGHT (SMART SUMMARY)
+    # INSIGHT ENGINE
     # ======================================================
     def generate_insight(self, metrics, nesting, issues):
         insights = []
 
         if metrics["length"] > 20:
             insights.append("Function is too large.")
-
         if metrics["args"] > 4:
             insights.append("Too many parameters increase coupling.")
-
         if nesting >= 3:
             insights.append("Deep nesting increases complexity.")
-
         if len(issues) >= 3:
             insights.append("Multiple design issues detected.")
 
         return " ".join(insights) if insights else "Structure looks good."
 
     # ======================================================
-    # MAIN ANALYSIS ENGINE
+    # MAIN ANALYSIS
     # ======================================================
     def full_analysis(self):
         results = []
@@ -171,58 +147,43 @@ class CodeAnalyzer:
 
             issues = []
 
-            # ---------------- RULES ----------------
+            # RULES
             if metrics["length"] > 10:
                 issues.append({"type": "Too long", "severity": "Medium"})
-
             if metrics["args"] > 4:
                 issues.append({"type": "Too many arguments", "severity": "Medium"})
-
             if complexity > 10:
                 issues.append({"type": "Too complex", "severity": "High"})
-
             if nesting >= 3:
                 issues.append({"type": "Deep nesting", "severity": "High"})
-
             if metrics["length"] > 30 or complexity > 15:
                 issues.append({"type": "God Function", "severity": "Critical"})
-
             if bad_vars:
                 issues.append({"type": "Bad variables", "severity": "Medium"})
-
             if unused_vars:
                 issues.append({"type": "Unused variables", "severity": "Medium"})
 
-            if local_var_count > 10:
-                issues.append({
-                    "type": "Too many local variables",
-                    "severity": "Medium"
-                })
-
-            # ---------------- ADD SUGGESTIONS ----------------
+            # suggestions
             for i in issues:
                 i["suggestion"] = self.get_suggestion(i["type"], func.name)
 
-            # ---------------- SCORE ----------------
+            # score
             score = 10
             for i in issues:
                 if i["severity"] == "Critical":
                     score -= 5
                 elif i["severity"] == "High":
                     score -= 3
-                elif i["severity"] == "Medium":
+                else:
                     score -= 2
-
-            if nesting >= 3:
-                score -= 2
 
             score = max(score, 0)
 
-            # ---------------- AI REVIEW ----------------
-            func_code = self.get_function_code(func)
+            # AI review (SAFE)
+            func_code = self.get_function_source(func)
             ai_review = self.ai.generate_review(func_code)
 
-            # ---------------- INSIGHT ----------------
+            # insight
             insight = self.generate_insight(metrics, nesting, issues)
 
             results.append({
