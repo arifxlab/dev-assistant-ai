@@ -84,16 +84,38 @@ class CodeAnalyzer:
     def get_unused_variables(self, func):
         assigned = set()
         used = set()
+        params = set()
 
+        # 1. function arguments (DO NOT count as unused variables)
+        for arg in func.args.args:
+            params.add(arg.arg)
+
+        # 2. walk function body only
         for node in ast.walk(func):
-            if isinstance(node, ast.Assign):
-                for t in node.targets:
-                    if isinstance(t, ast.Name):
-                        assigned.add(t.id)
-            elif isinstance(node, ast.Name):
+
+            # assignments: x = ...
+            if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Store):
+                assigned.add(node.id)
+
+            # usage: x + 1, print(x), return x
+            elif isinstance(node, ast.Name) and isinstance(node.ctx, ast.Load):
                 used.add(node.id)
 
-        return list(assigned - used)
+        # 3. real unused = assigned but never used
+        unused = assigned - used
+
+        # 4. remove function parameters (they are not "unused vars")
+        unused = unused - params
+
+        # 5. remove Python built-ins (optional but important)
+        builtin_names = {
+            "print", "len", "range", "str", "int", "float",
+            "list", "dict", "set", "tuple", "input"
+        }
+
+        unused = [v for v in unused if v not in builtin_names]
+
+        return list(unused)
 
     def get_local_variable_count(self, func):
         return len({n.id for n in ast.walk(func) if isinstance(n, ast.Name)})
