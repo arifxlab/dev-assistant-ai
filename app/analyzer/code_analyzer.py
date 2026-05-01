@@ -3,11 +3,47 @@ from app.ai.ai_engine import AIEngine
 import ast
 
 
-class CodeAnalyzer:
-    """
-    LEVEL 4 READY ANALYZER (CLEAN VERSION)
-    """
+# ======================================================
+# VARIABLE ANALYZER (SCORING ENGINE)
+# ======================================================
+class VariableAnalyzer:
+    LOOP_NAMES = {"i", "j", "k", "idx", "index"}
+    GENERIC_BAD = {"temp", "data", "value", "result", "var"}
 
+    def score_variable(self, name, context):
+        score = 10
+
+        func_size = context["function_size"]
+        is_param = context.get("is_param", False)
+        is_loop = context.get("is_loop", False)
+
+        # Loop variables are OK
+        if name in self.LOOP_NAMES or is_loop:
+            return 10
+
+        # Parameters stricter
+        if is_param and len(name) <= 2:
+            score -= 3
+
+        # Generic weak names
+        if name in self.GENERIC_BAD:
+            score -= 2
+
+        # Very short names
+        if len(name) <= 2:
+            score -= 3
+
+        # Large function penalty
+        if func_size > 20 and len(name) <= 3:
+            score -= 2
+
+        return max(score, 0)
+
+
+# ======================================================
+# MAIN ANALYZER
+# ======================================================
+class CodeAnalyzer:
     def __init__(self, file_path: str = ""):
         self.file_path = file_path
         self.tree = None
@@ -15,14 +51,14 @@ class CodeAnalyzer:
         self.ai = AIEngine()
 
     # ======================================================
-    # LOAD CODE INTO MEMORY
+    # LOAD CODE (IN MEMORY)
     # ======================================================
     def load_code(self, code: str):
         self.source_code = code
         self.tree = ast.parse(code)
 
     # ======================================================
-    # GET FUNCTION SOURCE FROM MEMORY
+    # GET FUNCTION SOURCE
     # ======================================================
     def get_function_source(self, func):
         lines = self.source_code.splitlines()
@@ -68,46 +104,70 @@ class CodeAnalyzer:
         return max_depth
 
     # ======================================================
-    # VARIABLE ANALYSIS
+    # VARIABLE ANALYSIS (NEW SYSTEM)
     # ======================================================
-    def get_bad_variable_names(self, func):
-        weak_names = {"x", "y", "z", "temp", "data", "val"}
-        bad = []
+    def analyze_variables(self, func):
+        analyzer = VariableAnalyzer()
+
+        results = []
+        func_size = self.get_metrics(func)["length"]
+
+        seen = set()
 
         for node in ast.walk(func):
             if isinstance(node, ast.Name):
-                if node.id in weak_names or len(node.id) == 1:
-                    bad.append(node.id)
+                if node.id in seen:
+                    continue
+                seen.add(node.id)
 
-        return list(set(bad))
+                context = {
+                    "function_size": func_size,
+                    "is_param": isinstance(node.ctx, ast.Param),
+                    "is_loop": False
+                }
 
+                score = analyzer.score_variable(node.id, context)
+
+                if score < 7:
+                    results.append({
+                        "name": node.id,
+                        "score": score,
+                        "reason": self._explain_variable(score)
+                    })
+
+        return results
+
+    def _explain_variable(self, score):
+        if score <= 3:
+            return "Very weak / unclear naming"
+        elif score <= 6:
+            return "Weak naming, consider improving"
+        else:
+            return "Acceptable"
+
+    # ======================================================
+    # UNUSED VARIABLES (FIXED)
+    # ======================================================
     def get_unused_variables(self, func):
         assigned = set()
         used = set()
         params = set()
 
-        # 1. function arguments (DO NOT count as unused variables)
+        # parameters
         for arg in func.args.args:
             params.add(arg.arg)
 
-        # 2. walk function body only
         for node in ast.walk(func):
 
-            # assignments: x = ...
             if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Store):
                 assigned.add(node.id)
 
-            # usage: x + 1, print(x), return x
             elif isinstance(node, ast.Name) and isinstance(node.ctx, ast.Load):
                 used.add(node.id)
 
-        # 3. real unused = assigned but never used
         unused = assigned - used
-
-        # 4. remove function parameters (they are not "unused vars")
         unused = unused - params
 
-        # 5. remove Python built-ins (optional but important)
         builtin_names = {
             "print", "len", "range", "str", "int", "float",
             "list", "dict", "set", "tuple", "input"
@@ -117,6 +177,9 @@ class CodeAnalyzer:
 
         return list(unused)
 
+    # ======================================================
+    # LOCAL VARIABLE COUNT
+    # ======================================================
     def get_local_variable_count(self, func):
         return len({n.id for n in ast.walk(func) if isinstance(n, ast.Name)})
 
@@ -163,7 +226,7 @@ class CodeAnalyzer:
             metrics = self.get_metrics(func)
             nesting = self.get_max_nesting(func)
 
-            bad_vars = self.get_bad_variable_names(func)
+            variables = self.analyze_variables(func)
             unused_vars = self.get_unused_variables(func)
             local_var_count = self.get_local_variable_count(func)
 
@@ -172,18 +235,30 @@ class CodeAnalyzer:
             # RULES
             if metrics["length"] > 10:
                 issues.append({"type": "Too long", "severity": "Medium"})
+
             if metrics["args"] > 4:
                 issues.append({"type": "Too many arguments", "severity": "Medium"})
+
             if complexity > 10:
                 issues.append({"type": "Too complex", "severity": "High"})
+
             if nesting >= 3:
                 issues.append({"type": "Deep nesting", "severity": "High"})
+
             if metrics["length"] > 30 or complexity > 15:
                 issues.append({"type": "God Function", "severity": "Critical"})
-            if bad_vars:
+
+            if variables:
                 issues.append({"type": "Bad variables", "severity": "Medium"})
+
             if unused_vars:
                 issues.append({"type": "Unused variables", "severity": "Medium"})
+
+            if local_var_count > 10:
+                issues.append({
+                    "type": "Too many local variables",
+                    "severity": "Medium"
+                })
 
             # suggestions
             for i in issues:
@@ -201,7 +276,7 @@ class CodeAnalyzer:
 
             score = max(score, 0)
 
-            # AI review (SAFE)
+            # AI review
             func_code = self.get_function_source(func)
             ai_review = self.ai.generate_review(func_code)
 
@@ -215,7 +290,7 @@ class CodeAnalyzer:
                 "complexity": complexity,
                 "nesting": nesting,
                 "variables": {
-                    "bad": bad_vars,
+                    "quality": variables,
                     "unused": unused_vars,
                     "count": local_var_count
                 },
