@@ -17,8 +17,8 @@ class VariableAnalyzer:
         is_param = context.get("is_param", False)
         is_loop = context.get("is_loop", False)
 
-        # Loop variables are OK
-        if name in self.LOOP_NAMES or is_loop:
+        # ✅ FIX — AST-based loop detection only
+        if is_loop:
             return 10
 
         # Parameters stricter
@@ -104,56 +104,65 @@ class CodeAnalyzer:
         return max_depth
 
     # ======================================================
-    # VARIABLE ANALYSIS (NEW SYSTEM)
+    # VARIABLE ANALYSIS (FOUNDATION FIXED)
     # ======================================================
     def analyze_variables(self, func):
         analyzer = VariableAnalyzer()
 
-        results = []
         func_size = self.get_metrics(func)["length"]
 
-        seen = set()
+        # ✅ Parameter detection
+        param_names = {arg.arg for arg in func.args.args} if hasattr(func, "args") else set()
+
+        # ✅ Loop detection via AST
+        loop_vars = set()
+        for node in ast.walk(func):
+            if isinstance(node, ast.For):
+                if isinstance(node.target, ast.Name):
+                    loop_vars.add(node.target.id)
+
+        # ✅ NEW — store best/worst result per variable
+        results_map = {}
 
         for node in ast.walk(func):
             if isinstance(node, ast.Name):
-                if node.id in seen:
-                    continue
-                seen.add(node.id)
 
                 context = {
                     "function_size": func_size,
-                    "is_param": isinstance(node.ctx, ast.Param),
-                    "is_loop": False
+                    "is_param": node.id in param_names,
+                    "is_loop": node.id in loop_vars
                 }
 
                 score = analyzer.score_variable(node.id, context)
 
-                if score < 7:
-                    results.append({
-                        "name": node.id,
-                        "score": score,
-                        "reason": self._explain_variable(score)
-                    })
+                if score <= 7:
+                    # keep worst score per variable
+                    if node.id not in results_map or score < results_map[node.id]["score"]:
+                        results_map[node.id] = {
+                            "name": node.id,
+                            "score": score,
+                            "reason": self._explain_variable(score, node.id, context)
+                        }
 
-        return results
+        return list(results_map.values())
 
-    def _explain_variable(self, score):
+    # ✅ Improved explanation
+    def _explain_variable(self, score, name=None, context=None):
         if score <= 3:
-            return "Very weak / unclear naming"
+            return f"'{name}' is unclear and too generic. It does not describe its purpose."
         elif score <= 6:
-            return "Weak naming, consider improving"
+            return f"'{name}' is somewhat descriptive but still weak. Consider making intent clearer."
         else:
-            return "Acceptable"
+            return f"'{name}' is acceptable but could still be improved for readability."
 
     # ======================================================
-    # UNUSED VARIABLES (FIXED)
+    # UNUSED VARIABLES
     # ======================================================
     def get_unused_variables(self, func):
         assigned = set()
         used = set()
         params = set()
 
-        # parameters
         for arg in func.args.args:
             params.add(arg.arg)
 
@@ -232,7 +241,6 @@ class CodeAnalyzer:
 
             issues = []
 
-            # RULES
             if metrics["length"] > 10:
                 issues.append({"type": "Too long", "severity": "Medium"})
 
@@ -260,11 +268,9 @@ class CodeAnalyzer:
                     "severity": "Medium"
                 })
 
-            # suggestions
             for i in issues:
                 i["suggestion"] = self.get_suggestion(i["type"], func.name)
 
-            # score
             score = 10
             for i in issues:
                 if i["severity"] == "Critical":
@@ -276,11 +282,9 @@ class CodeAnalyzer:
 
             score = max(score, 0)
 
-            # AI review
             func_code = self.get_function_source(func)
             ai_review = self.ai.generate_review(func_code)
 
-            # insight
             insight = self.generate_insight(metrics, nesting, issues)
 
             results.append({
