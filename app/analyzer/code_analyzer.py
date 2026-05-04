@@ -18,7 +18,7 @@ class VariableAnalyzer:
         is_loop = context.get("is_loop", False)
         is_acc = context.get("is_accumulator", False)
 
-        # Loop variables are fine
+        # Loop variables are acceptable
         if is_loop:
             return 10
 
@@ -26,13 +26,16 @@ class VariableAnalyzer:
         if is_param and len(name) <= 2:
             score -= 3
 
-        # Generic bad names
+        # Generic weak names
         if name in self.GENERIC_BAD:
             score -= 2
 
-        # Short names
+        # Short names (FIXED LOGIC)
         if len(name) <= 2:
-            score -= 1 if is_acc else -3
+            if is_acc:
+                score -= 1   # softer penalty
+            else:
+                score -= 3
 
         # Large function penalty
         if func_size > 20 and len(name) <= 3:
@@ -105,30 +108,32 @@ class CodeAnalyzer:
         return max_depth
 
     # ======================================================
-    # VARIABLE ANALYSIS
+    # VARIABLE ANALYSIS (FINAL MERGED)
     # ======================================================
     def analyze_variables(self, func):
         analyzer = VariableAnalyzer()
 
         func_size = self.get_metrics(func)["length"]
 
-        # Params
+        # Parameters
         param_names = {arg.arg for arg in func.args.args} if hasattr(func, "args") else set()
 
-        # Loop vars
+        # Loop variables
         loop_vars = set()
         for node in ast.walk(func):
             if isinstance(node, ast.For) and isinstance(node.target, ast.Name):
                 loop_vars.add(node.target.id)
 
-        # Accumulators
+        # Accumulator detection
         accumulators = set()
-
         for node in ast.walk(func):
+
+            # total += i
             if isinstance(node, ast.AugAssign):
                 if isinstance(node.target, ast.Name):
                     accumulators.add(node.target.id)
 
+            # total = total + i
             elif isinstance(node, ast.Assign):
                 if isinstance(node.value, ast.BinOp):
                     if isinstance(node.targets[0], ast.Name):
@@ -137,6 +142,7 @@ class CodeAnalyzer:
                             if left.id == node.targets[0].id:
                                 accumulators.add(left.id)
 
+        # Store worst score per variable
         results_map = {}
 
         for node in ast.walk(func):
@@ -151,7 +157,7 @@ class CodeAnalyzer:
 
                 score = analyzer.score_variable(node.id, context)
 
-                if score < 7:
+                if score <= 7:
                     if node.id not in results_map or score < results_map[node.id]["score"]:
                         results_map[node.id] = {
                             "name": node.id,
@@ -166,11 +172,11 @@ class CodeAnalyzer:
     # ======================================================
     def _explain_variable(self, score, name=None, context=None):
         if score <= 3:
-            return f"'{name}' is unclear and too generic. It does not describe its purpose."
+            return f"'{name}' is unclear and too generic."
         elif score <= 6:
-            return f"'{name}' is somewhat descriptive but still weak. Consider making intent clearer."
+            return f"'{name}' is somewhat descriptive but weak."
         else:
-            return f"'{name}' is acceptable but could still be improved."
+            return f"'{name}' is acceptable but could improve."
 
     # ======================================================
     # UNUSED VARIABLES
@@ -196,7 +202,7 @@ class CodeAnalyzer:
         return [v for v in unused if v not in builtin_names]
 
     # ======================================================
-    # LOCAL VARIABLES
+    # LOCAL VARIABLE COUNT
     # ======================================================
     def get_local_variable_count(self, func):
         return len({n.id for n in ast.walk(func) if isinstance(n, ast.Name)})
@@ -252,24 +258,32 @@ class CodeAnalyzer:
 
             if metrics["length"] > 10:
                 issues.append({"type": "Too long", "severity": "Medium"})
+
             if metrics["args"] > 4:
                 issues.append({"type": "Too many arguments", "severity": "Medium"})
+
             if complexity > 10:
                 issues.append({"type": "Too complex", "severity": "High"})
+
             if nesting >= 3:
                 issues.append({"type": "Deep nesting", "severity": "High"})
+
             if metrics["length"] > 30 or complexity > 15:
                 issues.append({"type": "God Function", "severity": "Critical"})
+
             if variables:
                 issues.append({"type": "Bad variables", "severity": "Medium"})
+
             if unused_vars:
                 issues.append({"type": "Unused variables", "severity": "Medium"})
+
             if local_var_count > 10:
                 issues.append({"type": "Too many local variables", "severity": "Medium"})
 
             for i in issues:
                 i["suggestion"] = self.get_suggestion(i["type"], func.name)
 
+            # Score
             score = 10
             for i in issues:
                 if i["severity"] == "Critical":
@@ -281,8 +295,12 @@ class CodeAnalyzer:
 
             score = max(score, 0)
 
+            # ✅ SAFE AI CALL (FIXES 500 ERROR)
             func_code = self.get_function_source(func)
-            ai_review = self.ai.generate_review(func_code)
+            try:
+                ai_review = self.ai.generate_review(func_code)
+            except Exception:
+                ai_review = "AI review unavailable."
 
             insight = self.generate_insight(metrics, nesting, issues)
 
@@ -306,7 +324,7 @@ class CodeAnalyzer:
         return results
 
     # ======================================================
-    # FILTERS (RESTORED FIX)
+    # FILTERS
     # ======================================================
     def get_worst_functions(self):
         return sorted(self.full_analysis(), key=lambda x: x["score"])
