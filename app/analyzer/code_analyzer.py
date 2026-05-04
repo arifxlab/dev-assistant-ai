@@ -1,6 +1,7 @@
 from app.analyzer.complexity_analyzer import ComplexityAnalyzer
 from app.ai.ai_engine import AIEngine
 import ast
+import hashlib
 
 
 # ======================================================
@@ -13,31 +14,23 @@ class VariableAnalyzer:
     def score_variable(self, name, context):
         score = 10
 
-        func_size = context["function_size"]
+        func_size = context.get("function_size", 0)
         is_param = context.get("is_param", False)
         is_loop = context.get("is_loop", False)
         is_acc = context.get("is_accumulator", False)
 
-        # Loop variables are acceptable
         if is_loop:
             return 10
 
-        # Parameter naming penalty
         if is_param and len(name) <= 2:
             score -= 3
 
-        # Generic weak names
         if name in self.GENERIC_BAD:
             score -= 2
 
-        # Short names (FIXED LOGIC)
         if len(name) <= 2:
-            if is_acc:
-                score -= 1   # softer penalty
-            else:
-                score -= 3
+            score -= 1 if is_acc else 3
 
-        # Large function penalty
         if func_size > 20 and len(name) <= 3:
             score -= 2
 
@@ -48,42 +41,75 @@ class VariableAnalyzer:
 # MAIN ANALYZER
 # ======================================================
 class CodeAnalyzer:
+    ENGINE_VERSION = "1.0.0"
+
     def __init__(self, file_path: str = ""):
         self.file_path = file_path
         self.tree = None
         self.source_code = ""
         self.ai = AIEngine()
 
+        # 🔥 CACHE SYSTEM (NEW)
+        self._cache = None
+        self._cache_hash = None
+
+    # ======================================================
+    # HASH
+    # ======================================================
+    def _hash(self, code: str):
+        return hashlib.md5(code.encode()).hexdigest()
+
     # ======================================================
     # LOAD CODE
     # ======================================================
     def load_code(self, code: str):
-        self.source_code = code
-        self.tree = ast.parse(code)
+        try:
+            self.source_code = code
+            self.tree = ast.parse(code)
+
+            # invalidate cache if code changed
+            code_hash = self._hash(code)
+            if code_hash != self._cache_hash:
+                self._cache = None
+                self._cache_hash = code_hash
+
+        except Exception:
+            self.tree = None
+            self.source_code = ""
+            self._cache = None
 
     # ======================================================
     # FUNCTION SOURCE
     # ======================================================
     def get_function_source(self, func):
-        lines = self.source_code.splitlines()
-        start = func.lineno - 1
-        end = getattr(func, "end_lineno", func.lineno)
-        return "\n".join(lines[start:end])
+        try:
+            lines = self.source_code.splitlines()
+            start = func.lineno - 1
+            end = getattr(func, "end_lineno", func.lineno)
+            return "\n".join(lines[start:end])
+        except Exception:
+            return ""
 
     # ======================================================
-    # FUNCTION EXTRACTION
+    # FUNCTIONS
     # ======================================================
     def get_functions(self):
+        if not self.tree:
+            return []
+
         return [
-            node for node in ast.walk(self.tree)
-            if isinstance(node, ast.FunctionDef)
+            n for n in ast.walk(self.tree)
+            if isinstance(n, ast.FunctionDef)
         ]
 
     # ======================================================
     # COMPLEXITY
     # ======================================================
     def get_complexity(self, func):
-        return ComplexityAnalyzer().analyze(func)
+        try:
+            return ComplexityAnalyzer().analyze(func)
+        except Exception:
+            return 0
 
     # ======================================================
     # METRICS
@@ -108,75 +134,57 @@ class CodeAnalyzer:
         return max_depth
 
     # ======================================================
-    # VARIABLE ANALYSIS (FINAL MERGED)
+    # VARIABLE ANALYSIS (CLEAN + FAST)
     # ======================================================
     def analyze_variables(self, func):
         analyzer = VariableAnalyzer()
 
         func_size = self.get_metrics(func)["length"]
 
-        # Parameters
-        param_names = {arg.arg for arg in func.args.args} if hasattr(func, "args") else set()
+        param_names = {a.arg for a in func.args.args}
 
-        # Loop variables
         loop_vars = set()
+        accumulators = set()
+
         for node in ast.walk(func):
+
             if isinstance(node, ast.For) and isinstance(node.target, ast.Name):
                 loop_vars.add(node.target.id)
 
-        # Accumulator detection
-        accumulators = set()
-        for node in ast.walk(func):
+            elif isinstance(node, ast.AugAssign) and isinstance(node.target, ast.Name):
+                accumulators.add(node.target.id)
 
-            # total += i
-            if isinstance(node, ast.AugAssign):
-                if isinstance(node.target, ast.Name):
-                    accumulators.add(node.target.id)
-
-            # total = total + i
-            elif isinstance(node, ast.Assign):
-                if isinstance(node.value, ast.BinOp):
-                    if isinstance(node.targets[0], ast.Name):
-                        left = node.value.left
-                        if isinstance(left, ast.Name):
-                            if left.id == node.targets[0].id:
-                                accumulators.add(left.id)
-
-        # Store worst score per variable
-        results_map = {}
+        results = {}
 
         for node in ast.walk(func):
             if isinstance(node, ast.Name):
+                name = node.id
 
                 context = {
                     "function_size": func_size,
-                    "is_param": node.id in param_names,
-                    "is_loop": node.id in loop_vars,
-                    "is_accumulator": node.id in accumulators
+                    "is_param": name in param_names,
+                    "is_loop": name in loop_vars,
+                    "is_accumulator": name in accumulators
                 }
 
-                score = analyzer.score_variable(node.id, context)
+                score = analyzer.score_variable(name, context)
 
-                if score <= 7:
-                    if node.id not in results_map or score < results_map[node.id]["score"]:
-                        results_map[node.id] = {
-                            "name": node.id,
+                if score < 7:
+                    if name not in results or score < results[name]["score"]:
+                        results[name] = {
+                            "name": name,
                             "score": score,
-                            "reason": self._explain_variable(score, node.id)
+                            "reason": self._explain(score, name)
                         }
 
-        return list(results_map.values())
+        return list(results.values())
 
-    # ======================================================
-    # EXPLANATION
-    # ======================================================
-    def _explain_variable(self, score, name=None, context=None):
+    def _explain(self, score, name):
         if score <= 3:
-            return f"'{name}' is unclear and too generic."
-        elif score <= 6:
-            return f"'{name}' is somewhat descriptive but weak."
-        else:
-            return f"'{name}' is acceptable but could improve."
+            return f"{name} is unclear"
+        if score <= 6:
+            return f"{name} is weak"
+        return f"{name} is acceptable"
 
     # ======================================================
     # UNUSED VARIABLES
@@ -184,64 +192,56 @@ class CodeAnalyzer:
     def get_unused_variables(self, func):
         assigned = set()
         used = set()
-        params = {arg.arg for arg in func.args.args}
+        params = {a.arg for a in func.args.args}
 
         for node in ast.walk(func):
-            if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Store):
-                assigned.add(node.id)
-            elif isinstance(node, ast.Name) and isinstance(node.ctx, ast.Load):
-                used.add(node.id)
+            if isinstance(node, ast.Name):
+                if isinstance(node.ctx, ast.Store):
+                    assigned.add(node.id)
+                elif isinstance(node.ctx, ast.Load):
+                    used.add(node.id)
 
         unused = assigned - used - params
 
-        builtin_names = {
-            "print", "len", "range", "str", "int", "float",
-            "list", "dict", "set", "tuple", "input"
-        }
-
-        return [v for v in unused if v not in builtin_names]
+        return list(unused)
 
     # ======================================================
-    # LOCAL VARIABLE COUNT
+    # LOCAL VARIABLES
     # ======================================================
     def get_local_variable_count(self, func):
         return len({n.id for n in ast.walk(func) if isinstance(n, ast.Name)})
 
     # ======================================================
-    # SUGGESTIONS
-    # ======================================================
-    def get_suggestion(self, issue, func_name):
-        return {
-            "Too long": f"Refactor '{func_name}' into smaller functions.",
-            "Too many arguments": f"Reduce parameters in '{func_name}'.",
-            "Too complex": f"Simplify logic in '{func_name}'.",
-            "Deep nesting": f"Flatten logic in '{func_name}'.",
-            "God Function": f"Split '{func_name}' into multiple functions.",
-            "Bad variables": f"Use meaningful variable names in '{func_name}'.",
-            "Unused variables": f"Remove unused variables in '{func_name}'."
-        }.get(issue, "No suggestion available.")
-
-    # ======================================================
-    # INSIGHT ENGINE
+    # INSIGHT
     # ======================================================
     def generate_insight(self, metrics, nesting, issues):
-        insights = []
+        out = []
 
         if metrics["length"] > 20:
-            insights.append("Function is too large.")
+            out.append("Large function")
         if metrics["args"] > 4:
-            insights.append("Too many parameters increase coupling.")
+            out.append("High coupling")
         if nesting >= 3:
-            insights.append("Deep nesting increases complexity.")
+            out.append("Deep nesting")
         if len(issues) >= 3:
-            insights.append("Multiple design issues detected.")
+            out.append("Multiple issues")
 
-        return " ".join(insights) if insights else "Structure looks good."
+        return " | ".join(out) if out else "Clean structure"
 
     # ======================================================
-    # MAIN ANALYSIS
+    # CACHE LAYER (🔥 IMPORTANT)
     # ======================================================
-    def full_analysis(self):
+    def _run(self):
+        if self._cache is not None:
+            return self._cache
+
+        self._cache = self._analyze_internal()
+        return self._cache
+
+    # ======================================================
+    # INTERNAL ANALYSIS
+    # ======================================================
+    def _analyze_internal(self):
         results = []
 
         for func in self.get_functions():
@@ -251,89 +251,67 @@ class CodeAnalyzer:
             nesting = self.get_max_nesting(func)
 
             variables = self.analyze_variables(func)
-            unused_vars = self.get_unused_variables(func)
-            local_var_count = self.get_local_variable_count(func)
+            unused = self.get_unused_variables(func)
+            local_count = self.get_local_variable_count(func)
 
             issues = []
 
             if metrics["length"] > 10:
                 issues.append({"type": "Too long", "severity": "Medium"})
-
             if metrics["args"] > 4:
-                issues.append({"type": "Too many arguments", "severity": "Medium"})
-
+                issues.append({"type": "Too many args", "severity": "Medium"})
             if complexity > 10:
                 issues.append({"type": "Too complex", "severity": "High"})
-
             if nesting >= 3:
                 issues.append({"type": "Deep nesting", "severity": "High"})
-
-            if metrics["length"] > 30 or complexity > 15:
-                issues.append({"type": "God Function", "severity": "Critical"})
-
             if variables:
                 issues.append({"type": "Bad variables", "severity": "Medium"})
+            if unused:
+                issues.append({"type": "Unused vars", "severity": "Medium"})
 
-            if unused_vars:
-                issues.append({"type": "Unused variables", "severity": "Medium"})
+            score = max(0, 10 - len(issues) * 2)
 
-            if local_var_count > 10:
-                issues.append({"type": "Too many local variables", "severity": "Medium"})
-
-            for i in issues:
-                i["suggestion"] = self.get_suggestion(i["type"], func.name)
-
-            # Score
-            score = 10
-            for i in issues:
-                if i["severity"] == "Critical":
-                    score -= 5
-                elif i["severity"] == "High":
-                    score -= 3
-                else:
-                    score -= 2
-
-            score = max(score, 0)
-
-            # ✅ SAFE AI CALL (FIXES 500 ERROR)
-            func_code = self.get_function_source(func)
             try:
-                ai_review = self.ai.generate_review(func_code)
+                ai_review = self.ai.generate_review({
+                    "code": self.get_function_source(func),
+                    "issues": issues,
+                    "metrics": metrics,
+                    "complexity": complexity,
+                    "nesting": nesting
+                })
             except Exception:
-                ai_review = "AI review unavailable."
-
-            insight = self.generate_insight(metrics, nesting, issues)
+                ai_review = "AI unavailable"
 
             results.append({
                 "name": func.name,
-                "length": metrics["length"],
-                "args": metrics["args"],
+                "metrics": metrics,
                 "complexity": complexity,
                 "nesting": nesting,
-                "variables": {
-                    "quality": variables,
-                    "unused": unused_vars,
-                    "count": local_var_count
-                },
+                "variables": variables,
+                "unused": unused,
                 "issues": issues,
                 "score": score,
-                "ai_insight": insight,
-                "ai_review": ai_review
+                "ai_review": ai_review,
+                "insight": self.generate_insight(metrics, nesting, issues),
+                "engine_version": self.ENGINE_VERSION
             })
 
         return results
 
     # ======================================================
-    # FILTERS
+    # PUBLIC API
     # ======================================================
+    def full_analysis(self):
+        return self._run()
+
     def get_worst_functions(self):
-        return sorted(self.full_analysis(), key=lambda x: x["score"])
+        return sorted(self._run(), key=lambda x: x["score"])
 
     def get_problematic_functions(self):
-        return [f for f in self.full_analysis() if f["issues"]]
+        return [f for f in self._run() if f["issues"]]
 
     def get_critical_functions(self):
         return [
-            f for f in self.full_analysis()
+            f for f in self._run()
             if any(i["severity"] == "Critical" for i in f["issues"])
         ]
