@@ -1,5 +1,7 @@
 fastapi
 uvicorn
-pylint
 pydantic
-colorama
+ast-tools
+typing-extensions
+dataclasses; python_version < "3.7"
+ollama
